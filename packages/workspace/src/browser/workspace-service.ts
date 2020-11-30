@@ -32,6 +32,10 @@ import { FileStat, BaseStat } from '@theia/filesystem/lib/common/files';
 import { FileService } from '@theia/filesystem/lib/browser/file-service';
 import { FileSystemPreferences } from '@theia/filesystem/lib/browser';
 
+export interface WorkspaceFolder extends FileStat {
+    rootName?: string;
+}
+
 /**
  * The workspace service.
  */
@@ -40,8 +44,8 @@ export class WorkspaceService implements FrontendApplicationContribution {
 
     private _workspace: FileStat | undefined;
 
-    private _roots: FileStat[] = [];
-    private deferredRoots = new Deferred<FileStat[]>();
+    private _roots: WorkspaceFolder[] = [];
+    private deferredRoots = new Deferred<WorkspaceFolder[]>();
 
     @inject(FileService)
     protected readonly fileService: FileService;
@@ -153,18 +157,18 @@ export class WorkspaceService implements FrontendApplicationContribution {
         window.location.hash = workspacePath;
     }
 
-    get roots(): Promise<FileStat[]> {
+    get roots(): Promise<WorkspaceFolder[]> {
         return this.deferredRoots.promise;
     }
-    tryGetRoots(): FileStat[] {
+    tryGetRoots(): WorkspaceFolder[] {
         return this._roots;
     }
     get workspace(): FileStat | undefined {
         return this._workspace;
     }
 
-    protected readonly onWorkspaceChangeEmitter = new Emitter<FileStat[]>();
-    get onWorkspaceChanged(): Event<FileStat[]> {
+    protected readonly onWorkspaceChangeEmitter = new Emitter<WorkspaceFolder[]>();
+    get onWorkspaceChanged(): Event<WorkspaceFolder[]> {
         return this.onWorkspaceChangeEmitter.event;
     }
 
@@ -218,14 +222,14 @@ export class WorkspaceService implements FrontendApplicationContribution {
         if (rootsChanged) {
             this._roots = newRoots;
             this.deferredRoots.resolve(this._roots); // in order to resolve first
-            this.deferredRoots = new Deferred<FileStat[]>();
+            this.deferredRoots = new Deferred<WorkspaceFolder[]>();
             this.deferredRoots.resolve(this._roots);
             this.onWorkspaceChangeEmitter.fire(this._roots);
         }
     }
 
-    protected async computeRoots(): Promise<FileStat[]> {
-        const roots: FileStat[] = [];
+    protected async computeRoots(): Promise<WorkspaceFolder[]> {
+        const roots: WorkspaceFolder[] = [];
         if (this._workspace) {
             if (this._workspace.isDirectory) {
                 return [this._workspace];
@@ -233,12 +237,20 @@ export class WorkspaceService implements FrontendApplicationContribution {
 
             const workspaceData = await this.getWorkspaceDataFromFile();
             if (workspaceData) {
-                for (const { path } of workspaceData.folders) {
-                    const valid = await this.toValidRoot(path);
+                for (const folder of workspaceData.folders) {
+                    const { path } = folder;
+                    const valid = await this.toValidRoot(path) as WorkspaceFolder;
                     if (valid) {
+                        if (folder.name) {
+                            valid.rootName = folder.name;
+                        }
                         roots.push(valid);
                     } else {
-                        roots.push(FileStat.dir(path));
+                        const root = FileStat.dir(path) as WorkspaceFolder;
+                        if (folder.name) {
+                            root.rootName = folder.name;
+                        }
+                        roots.push(root);
                     }
                 }
             }
@@ -379,18 +391,23 @@ export class WorkspaceService implements FrontendApplicationContribution {
         }
     }
 
-    async spliceRoots(start: number, deleteCount?: number, ...rootsToAdd: URI[]): Promise<URI[]> {
+    async spliceRoots(start: number, deleteCount?: number, ...rootsToAdd: (URI | { uri: URI, name?: string })[]): Promise<URI[]> {
         if (!this._workspace) {
             throw new Error('There is not active workspace');
         }
         const dedup = new Set<string>();
-        const roots = this._roots.map(root => (dedup.add(root.resource.toString()), root.resource.toString()));
-        const toAdd: string[] = [];
+        const roots: { uri: string, name?: string }[] = this._roots.map(root => (dedup.add(root.resource.toString()), { uri: root.resource.toString(), name: root.name }));
+        const toAdd: { uri: string, name?: string }[] = [];
         for (const root of rootsToAdd) {
-            const uri = root.toString();
-            if (!dedup.has(uri)) {
-                dedup.add(uri);
-                toAdd.push(uri);
+            const data = root instanceof URI ? {
+                uri: root.toString()
+            } : {
+                    uri: root.uri.toString(),
+                    name: root.name
+                };
+            if (!dedup.has(data.uri)) {
+                dedup.add(data.uri);
+                toAdd.push(data);
             }
         }
         const toRemove = roots.splice(start, deleteCount || 0, ...toAdd);
@@ -404,7 +421,7 @@ export class WorkspaceService implements FrontendApplicationContribution {
         const currentData = await this.getWorkspaceDataFromFile();
         const newData = WorkspaceData.buildWorkspaceData(roots, currentData && currentData.settings);
         await this.writeWorkspaceFile(this._workspace, newData);
-        return toRemove.map(root => new URI(root));
+        return toRemove.map(root => new URI(root.uri));
     }
 
     async getUntitledWorkspace(): Promise<URI> {
@@ -684,17 +701,17 @@ export namespace WorkspaceData {
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    export function buildWorkspaceData(folders: string[] | FileStat[], settings: { [id: string]: any } | undefined): WorkspaceData {
-        let roots: string[] = [];
+    export function buildWorkspaceData(folders: { uri: string, name?: string }[] | FileStat[], settings: { [id: string]: any } | undefined): WorkspaceData {
+        let roots: { uri: string, name?: string }[] = [];
         if (folders.length > 0) {
-            if (typeof folders[0] !== 'string') {
-                roots = (<FileStat[]>folders).map(folder => folder.resource.toString());
+            if (FileStat.is(folders[0])) {
+                roots = (<FileStat[]>folders).map(folder => ({ uri: folder.resource.toString(), name: folder.name }));
             } else {
-                roots = <string[]>folders;
+                roots = <{ uri: string, name?: string }[]>folders;
             }
         }
         const data: WorkspaceData = {
-            folders: roots.map(folder => ({ path: folder }))
+            folders: roots.map(folder => ({ path: folder.uri, name: folder.name }))
         };
         if (settings) {
             data.settings = settings;
@@ -703,15 +720,15 @@ export namespace WorkspaceData {
     }
 
     export function transformToRelative(data: WorkspaceData, workspaceFile?: FileStat): WorkspaceData {
-        const folderUris: string[] = [];
+        const folderUris: { uri: string, name?: string }[] = [];
         const workspaceFileUri = new URI(workspaceFile ? workspaceFile.resource.toString() : '').withScheme('file');
-        for (const { path } of data.folders) {
-            const folderUri = new URI(path).withScheme('file');
+        for (const folder of data.folders) {
+            const folderUri = new URI(folder.path);
             const rel = workspaceFileUri.parent.relative(folderUri);
             if (rel) {
-                folderUris.push(rel.toString());
+                folderUris.push({ uri: rel.toString(), name: folder.name });
             } else {
-                folderUris.push(folderUri.toString());
+                folderUris.push({ uri: folderUri.toString(), name: folder.name });
             }
         }
         return buildWorkspaceData(folderUris, data.settings);
@@ -719,13 +736,13 @@ export namespace WorkspaceData {
 
     export function transformToAbsolute(data: WorkspaceData, workspaceFile?: BaseStat): WorkspaceData {
         if (workspaceFile) {
-            const folders: string[] = [];
+            const folders: { uri: string, name?: string }[] = [];
             for (const folder of data.folders) {
                 const path = folder.path;
-                if (path.startsWith('file:///')) {
-                    folders.push(path);
+                if (new URI(path).scheme.length !== 0) {
+                    folders.push({ uri: path, name: folder.name });
                 } else {
-                    folders.push(workspaceFile.resource.withScheme('file').parent.resolve(path).toString());
+                    folders.push({ uri: workspaceFile.resource.withScheme('file').parent.resolve(path).toString(), name: folder.name });
                 }
 
             }

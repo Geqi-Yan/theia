@@ -83,9 +83,9 @@ import { BinaryBuffer } from '@theia/core/lib/common/buffer';
 import { ResourceLabelFormatter } from '@theia/core/lib/common/label-protocol';
 import type {
     InternalTimelineOptions,
-    Timeline,
-    TimelineChangeEvent,
-    TimelineProviderDescriptor
+        Timeline,
+        TimelineChangeEvent,
+        TimelineProviderDescriptor
 } from '@theia/timeline/lib/common/timeline-model';
 import { SerializableEnvironmentVariableCollection } from '@theia/terminal/lib/common/base-terminal-protocol';
 import { ThemeType } from '@theia/core/lib/browser/theming';
@@ -546,7 +546,7 @@ export interface WorkspaceMain {
     $registerTextDocumentContentProvider(scheme: string): Promise<void>;
     $unregisterTextDocumentContentProvider(scheme: string): void;
     $onTextDocumentContentChange(uri: string, content: string): void;
-    $updateWorkspaceFolders(start: number, deleteCount?: number, ...rootsToAdd: string[]): Promise<void>;
+    $updateWorkspaceFolders(start: number, deleteCount?: number, ...rootsToAdd: { uri: string, name?: string }[]): Promise<void>;
 }
 
 export interface WorkspaceExt {
