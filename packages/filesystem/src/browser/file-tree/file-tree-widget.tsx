@@ -18,9 +18,8 @@ import * as React from 'react';
 import { injectable, inject } from 'inversify';
 import { DisposableCollection, Disposable } from '@theia/core/lib/common/disposable';
 import URI from '@theia/core/lib/common/uri';
-import { UriSelection } from '@theia/core/lib/common/selection';
 import { isCancelled } from '@theia/core/lib/common/cancellation';
-import { ContextMenuRenderer, NodeProps, TreeProps, TreeNode, CompositeTreeNode, TreeViewWelcomeWidget } from '@theia/core/lib/browser';
+import { ContextMenuRenderer, NodeProps, TreeProps, TreeNode, CompositeTreeNode, TreeViewWelcomeWidget, LabelProvider } from '@theia/core/lib/browser';
 import { FileUploadService } from '../file-upload-service';
 import { DirNode, FileStatNode, FileStatNodeData } from './file-tree';
 import { FileTreeModel } from './file-tree-model';
@@ -42,6 +41,9 @@ export class FileTreeWidget extends TreeViewWelcomeWidget {
 
     @inject(IconThemeService)
     protected readonly iconThemeService: IconThemeService;
+
+    @inject(LabelProvider)
+    protected readonly labelProvider: LabelProvider;
 
     constructor(
         @inject(TreeProps) readonly props: TreeProps,
@@ -99,8 +101,7 @@ export class FileTreeWidget extends TreeViewWelcomeWidget {
     }
 
     protected getNodeTooltip(node: TreeNode): string | undefined {
-        const uri = UriSelection.getUri(node);
-        return uri ? uri.path.toString() : undefined;
+        return this.labelProvider.getNodeTooltip(node);
     }
 
     protected handleDragStartEvent(node: TreeNode, event: React.DragEvent): void {

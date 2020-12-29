@@ -93,6 +93,8 @@ export interface LabelProviderContribution {
      */
     affects?(element: object, event: DidChangeLabelEvent): boolean;
 
+    getNodeTooltip?(element: object): string | undefined;
+
 }
 
 export interface DidChangeLabelEvent {
@@ -387,4 +389,17 @@ export class LabelProvider implements FrontendApplicationContribution {
         );
         return prioritized.map(c => c.value);
     }
+
+    getNodeTooltip(element: object): string | undefined {
+        const contributions = this.findContribution(element);
+        for (const contribution of contributions) {
+            const value = contribution.getNodeTooltip && contribution.getNodeTooltip(element);
+            if (value === undefined) {
+                continue;
+            }
+            return value;
+        }
+        return undefined;
+    }
+
 }

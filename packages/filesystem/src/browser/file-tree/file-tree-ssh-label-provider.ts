@@ -15,46 +15,28 @@
  ********************************************************************************/
 
 import { injectable, inject } from 'inversify';
-import { LabelProviderContribution, DidChangeLabelEvent, LabelProvider } from '@theia/core/lib/browser/label-provider';
+import { LabelProviderContribution } from '@theia/core/lib/browser/label-provider';
 import { FileStatNode } from './file-tree';
 import { TreeLabelProvider } from '@theia/core/lib/browser/tree/tree-label-provider';
-import { UriSelection } from '@theia/core';
-import { TreeNode } from '@theia/core/src/browser/tree';
+import { FileTreeLabelProvider } from './file-tree-label-provider';
+import { TreeNode } from '@theia/core/lib/browser/tree/tree';
+import { UriSelection } from '@theia/core/lib/common/selection';
 
 @injectable()
-export class FileTreeLabelProvider implements LabelProviderContribution {
-
-    @inject(LabelProvider)
-    protected readonly labelProvider: LabelProvider;
+export class FileTreeSSHLabelProvider extends FileTreeLabelProvider implements LabelProviderContribution {
 
     @inject(TreeLabelProvider)
     protected readonly treeLabelProvider: TreeLabelProvider;
 
     canHandle(element: object): number {
         return FileStatNode.is(element) ?
-            this.treeLabelProvider.canHandle(element) + 1 :
+            (element.uri && element.uri.scheme === 'ssh' ? super.canHandle(element) + 1 : 0) :
             0;
-    }
-
-    getIcon(node: FileStatNode): string {
-        return this.labelProvider.getIcon(node.fileStat);
-    }
-
-    getName(node: FileStatNode): string {
-        return this.labelProvider.getName(node.fileStat);
-    }
-
-    getDescription(node: FileStatNode): string {
-        return this.labelProvider.getLongName(node.fileStat);
-    }
-
-    affects(node: FileStatNode, event: DidChangeLabelEvent): boolean {
-        return event.affects(node.fileStat);
     }
 
     getNodeTooltip(node: TreeNode): string | undefined {
         const uri = UriSelection.getUri(node);
-        return uri ? uri.path.toString() : undefined;
+        return uri ? uri.toString() : undefined;
     }
 
 }

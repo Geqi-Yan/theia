@@ -36,6 +36,7 @@ import { bindContributionProvider } from '@theia/core/lib/common/contribution-pr
 import { RemoteFileServiceContribution } from './remote-file-service-contribution';
 import { FileSystemWatcherErrorHandler } from './filesystem-watcher-error-handler';
 import { UTF8 } from '@theia/core/lib/common/encodings';
+import { FileTreeSSHLabelProvider } from './file-tree/file-tree-ssh-label-provider';
 
 export default new ContainerModule(bind => {
     bindFileSystemPreferences(bind);
@@ -62,7 +63,7 @@ export default new ContainerModule(bind => {
             lastModification: stat.mtime,
             size: stat.size,
             isDirectory: 'isDirectory' in stat && stat.isDirectory,
-            children: 'children' in stat ? stat.children?.map(convertStat) : undefined
+            children: 'children' in stat ? stat.children ?.map(convertStat) : undefined
         });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const rethrowError: (uri: string, error: any) => never = (uri, error) => {
@@ -127,9 +128,9 @@ export default new ContainerModule(bind => {
                     const result = await fileService.update(new URI(file.uri), contentChanges, {
                         mtime: file.lastModification,
                         etag: etag({ size: file.size, mtime: file.lastModification }),
-                        readEncoding: options?.encoding || UTF8,
-                        encoding: options?.overwriteEncoding,
-                        overwriteEncoding: !!options?.overwriteEncoding
+                        readEncoding: options ?.encoding || UTF8,
+                        encoding: options ?.overwriteEncoding,
+                        overwriteEncoding: !!options ?.overwriteEncoding
                     });
                     return convertStat(result);
                 } catch (e) {
@@ -154,7 +155,7 @@ export default new ContainerModule(bind => {
             }
             async createFile(uri: string, options?: { content?: string | undefined; encoding?: string | undefined; } | undefined): Promise<FileStat> {
                 try {
-                    const result = await fileService.create(new URI(uri), options?.content, { encoding: options?.encoding });
+                    const result = await fileService.create(new URI(uri), options ?.content, { encoding: options ?.encoding });
                     return convertStat(result);
                 } catch (e) {
                     rethrowError(uri, e);
@@ -173,7 +174,7 @@ export default new ContainerModule(bind => {
             }
             async delete(uri: string, options?: FileDeleteOptions | undefined): Promise<void> {
                 try {
-                    return await fileService.delete(new URI(uri), { useTrash: options?.moveToTrash, recursive: true });
+                    return await fileService.delete(new URI(uri), { useTrash: options ?.moveToTrash, recursive: true });
                 } catch (e) {
                     rethrowError(uri, e);
                 }
@@ -217,6 +218,9 @@ export default new ContainerModule(bind => {
 
     bind(FileTreeLabelProvider).toSelf().inSingletonScope();
     bind(LabelProviderContribution).toService(FileTreeLabelProvider);
+
+    bind(FileTreeSSHLabelProvider).toSelf().inSingletonScope();
+    bind(LabelProviderContribution).toService(FileTreeSSHLabelProvider);
 });
 
 export function bindFileResource(bind: interfaces.Bind): void {
